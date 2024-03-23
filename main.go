@@ -89,6 +89,8 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		switch message.Type {
+		// Only server sends SDP offer
+		// Don't need to write listener for "offer"
 		case "answer":
 			var answer webrtc.SessionDescription
 			json.Unmarshal(message.Data, &answer)

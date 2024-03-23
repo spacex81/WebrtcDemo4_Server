@@ -30,7 +30,7 @@ func NewPeer(ws *websocket.Conn) *Peer {
 }
 
 func (peer *Peer) connect() {
-	//
+	// `mediaEngine` and `settingEngine` is used in order to send proper ice candidates to client
 	mediaEngine := webrtc.MediaEngine{}
 	mediaEngine.RegisterDefaultCodecs()
 
@@ -76,6 +76,7 @@ func (peer *Peer) connect() {
 	}
 	peer.pc = pc
 
+	// need to add tracks in order to send offer and candidates
 	for _, typ := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeVideo, webrtc.RTPCodecTypeAudio} {
 		if _, err := peer.pc.AddTransceiverFromKind(typ, webrtc.RTPTransceiverInit{
 			Direction: webrtc.RTPTransceiverDirectionRecvonly,
@@ -119,7 +120,7 @@ func (peer *Peer) connect() {
 		}
 	})
 
-	// Checkpoint: if things go wrong. erase the content
+	// relay remote tracks received from a user to other room members
 	peer.pc.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
 		trackLocal, err := webrtc.NewTrackLocalStaticRTP(tr.Codec().RTPCodecCapability, tr.ID(), tr.StreamID())
 		if err != nil {
@@ -154,15 +155,17 @@ func (peer *Peer) connect() {
 	// peer.syncTracks()
 }
 
+// this function should run whenever room.trackLocals is added/removed/created/destroyed
 func (peer *Peer) syncTracks() {
 	room := peer.myRoom
-	// this function should run whenever room.trackLocals is added/removed/created/destroyed
 	room.mu.Lock()
 	defer func() {
 		room.mu.Unlock()
 		room.dispatchKeyFrame()
 	}()
 
+	// 1. delete outdated tracks 2. prevent sending users own track 3. adding new tracks
+	// return true for retry
 	attemptSync := func() (tryAgain bool) {
 		for _, peer := range room.peers {
 			if peer.pc.ConnectionState() == webrtc.PeerConnectionStateClosed {
@@ -179,6 +182,7 @@ func (peer *Peer) syncTracks() {
 
 				existingSenders[sender.Track().ID()] = true
 
+				// erase sender track from peer that is no longer need to be sent
 				if _, ok := room.trackLocals[sender.Track().ID()]; !ok {
 					if err := peer.pc.RemoveTrack(sender); err != nil {
 						return true
@@ -186,6 +190,8 @@ func (peer *Peer) syncTracks() {
 				}
 			}
 
+			// need to add receiver tracks to the list in order to prevent
+			// from sending tracks to client himself
 			for _, receiver := range peer.pc.GetReceivers() {
 				if receiver.Track() == nil {
 					continue
@@ -194,6 +200,7 @@ func (peer *Peer) syncTracks() {
 				existingSenders[receiver.Track().ID()] = true
 			}
 
+			// add tracks to client that is newly added to trackLocals
 			for trackID, track := range room.trackLocals {
 				if _, ok := existingSenders[trackID]; !ok {
 					if _, err := peer.pc.AddTrack(track); err != nil {
@@ -202,7 +209,8 @@ func (peer *Peer) syncTracks() {
 				}
 			}
 
-			// need sendOffer but with `return true`
+			// need to replace with 'peer.sendOffer'
+			/////////////////////////////////////////////////
 			offer, err := peer.pc.CreateOffer(nil)
 			if err != nil {
 				log.Println("Error on Creating Offer: ", err)
@@ -227,7 +235,7 @@ func (peer *Peer) syncTracks() {
 			}
 
 			peer.safeWrite(messageBytes)
-			//
+			/////////////////////////////////////////////////
 		}
 
 		return
@@ -276,8 +284,6 @@ func (peer *Peer) sendOffer() {
 }
 
 func (peer *Peer) sendRoomId() {
-	// send websocket message with room id
-	// iceBytes, err := json.Marshal(i.ToJSON())
 	roomIdBytes, err := json.Marshal(RoomIdData{
 		RoomId: peer.myRoom.id,
 	})

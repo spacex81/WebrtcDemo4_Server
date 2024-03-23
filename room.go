@@ -58,6 +58,7 @@ func (manager *RoomManager) allocate() {
 	room.print()
 	// establish peer connection among room.peers
 
+	// initiate peer connection after room is created
 	for _, peer := range room.peers {
 		peer.connect()
 	}
