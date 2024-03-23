@@ -49,13 +49,6 @@ func main() {
 		}
 	}()
 
-	// maybe this will handling screen balooning
-	// go func() {
-	// 	for range time.NewTicker(time.Second * 3).C {
-	// 		dispatchKeyFrame()
-	// 	}
-	// }()
-
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		fmt.Println("Error Listening to Server: ", err)
