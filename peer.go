@@ -300,4 +300,4 @@ func (peer *Peer) safeWrite(bytes []byte) {
 	peer.mu.Lock()
 	peer.ws.WriteMessage(websocket.TextMessage, bytes)
 	peer.mu.Unlock()
-
+}
